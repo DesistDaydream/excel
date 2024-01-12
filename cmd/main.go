@@ -147,9 +147,8 @@ func (p *problem) calculateScoreRate(sheetName string, f *excelize.File) float64
 // 计算班级各题型的得分情况
 func (p *problem) calculateOfProblemTypeWithClass(problemType string, sheetName string, classRowNum int, f *excelize.File, fResult *excelize.File) {
 	var (
-		problemAllTotalScore  float64
-		problemAllActualScore float64
-		calculationRate       float64
+		problemAllTotalScore   float64
+		problemTypeActualScore float64
 	)
 
 	problemColStart := pcm[problemType].classRateColStart + 2
@@ -174,20 +173,20 @@ func (p *problem) calculateOfProblemTypeWithClass(problemType string, sheetName 
 		fmt.Printf("第 %v 题 %v 总得分 %v，得分率为 %0.2f%%\n", pn, problemType, actualScore, rate)
 
 		resultScoreCol, _ := excelize.ColumnNumberToName(problemColStart)
-		fResult.SetCellStr("班级各题得分率", resultScoreCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f", actualScore)) // 第 X 题实得分
 		resultRateCol, _ := excelize.ColumnNumberToName(problemColStart + 1)
-		fResult.SetCellStr("班级各题得分率", resultRateCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f%%", rate)) // 第 X 题得分率
+		fResult.SetCellStr("班级各题得分率", resultScoreCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f", actualScore)) // 第 X 题实得分
+		fResult.SetCellStr("班级各题得分率", resultRateCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f%%", rate))       // 第 X 题得分率
 		problemColStart += 2
 
 		problemAllTotalScore += totalScore
-		problemAllActualScore += actualScore
+		problemTypeActualScore += actualScore
 	}
 
 	problemScoreCol, _ := excelize.ColumnNumberToName(pcm[problemType].classRateColStart)
 	problemRateCol, _ := excelize.ColumnNumberToName(pcm[problemType].classRateColStart + 1)
-	calculationRate = (problemAllActualScore / problemAllTotalScore) * 100
-	fResult.SetCellStr("班级各题得分率", problemScoreCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f", problemAllActualScore)) // 某题型实得分
-	fResult.SetCellStr("班级各题得分率", problemRateCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f%%", calculationRate))      // 某题型总得分率
+	problemTypeRate := (problemTypeActualScore / problemAllTotalScore) * 100
+	fResult.SetCellStr("班级各题得分率", problemScoreCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f", problemTypeActualScore)) // 某题型实得分
+	fResult.SetCellStr("班级各题得分率", problemRateCol+strconv.Itoa(classRowNum), fmt.Sprintf("%0.2f%%", problemTypeRate))       // 某题型得分率
 }
 
 // 计算年级各题型的得分情况

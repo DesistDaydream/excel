@@ -6,7 +6,14 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
 	"github.com/xuri/excelize/v2"
+
+	logging "github.com/DesistDaydream/logging/pkg/logrus_init"
+)
+
+var (
+	logFlags logging.LogrusFlags
 )
 
 type problemCellNum struct {
@@ -14,6 +21,7 @@ type problemCellNum struct {
 	gradeRateColStart int
 }
 
+// TODO: 读取 result_tmp.xlsx 文件，从文件中获取单元格的坐标位置
 var pcm = map[string]problemCellNum{
 	"计算题": problemCellNum{
 		classRateColStart: 7,
@@ -55,7 +63,7 @@ func NewProblems(f *excelize.File) *problem {
 	if err != nil {
 		logrus.Errorf("get cols failed, err:%v", err)
 	}
-	// fmt.Println(rows)
+
 	for i, row := range rows {
 		var q problemType
 
@@ -69,21 +77,24 @@ func NewProblems(f *excelize.File) *problem {
 
 		// 获取题号
 		qNums, _ := f.GetCellValue("info", "B"+strconv.Itoa(i+1))
-		qNum := strings.Split(qNums, " ")
+		qNum := strings.Fields(qNums)
 		for _, n := range qNum {
 			ni, err := strconv.Atoi(n)
 			if err != nil {
-				logrus.Errorf("strconv.Atoi failed, err:%v", err)
+				logrus.Fatalf("将题号 %v 转为数字异常: %v", n, err)
 			}
 			q.problemNumbers = append(q.problemNumbers, ni)
 		}
 
 		// 获取题号对应的分值
 		qScores, _ := f.GetCellValue("info", "C"+strconv.Itoa(i+1))
-		qScore := strings.Split(qScores, " ")
+		qScore := strings.Fields(qScores)
 		q.problemScore = make(map[int]int)
 		for i, s := range qScore {
-			si, _ := strconv.Atoi(s)
+			si, err := strconv.Atoi(s)
+			if err != nil {
+				logrus.Fatalf("将题号对应分值 %v 转为数字异常: %v", s, err)
+			}
 			q.problemScore[q.problemNumbers[i]] = si
 		}
 
@@ -93,7 +104,15 @@ func NewProblems(f *excelize.File) *problem {
 		ps[row[0]] = q
 	}
 
-	fmt.Println(ps)
+	if logrus.GetLevel() == logrus.DebugLevel {
+		logrus.Debugf("共有 %v 种题型", len(ps))
+		for k, v := range ps {
+			logrus.WithFields(logrus.Fields{}).Debugf("%v 有 %v 道: %v", k, len(v.problemNumbers), v.problemNumbers)
+			for k1, v1 := range v.problemScore {
+				logrus.Debugf("第 %v 题分值为: %v", k1, v1)
+			}
+		}
+	}
 
 	// 获取班级总数
 	classTotal, err := f.GetCellValue("info", "D2")
@@ -125,7 +144,6 @@ func (p *problem) calculateScoreRate(sheetName string, f *excelize.File) float64
 	for problemType, problem := range p.problems {
 		logrus.Infof("开始计算 %v 得分率", problemType)
 		for _, pn := range problem.problemNumbers {
-			// fmt.Println(qn)
 			col, _ := excelize.ColumnNumberToName(pn + 3)
 			sum := float64(0)
 			for i := 0; i < p.classSize[sheetName]; i++ {
@@ -137,7 +155,7 @@ func (p *problem) calculateScoreRate(sheetName string, f *excelize.File) float64
 				sum += float64(vf)
 			}
 			rate := (float64(problem.problemScore[pn])*float64(p.classSize[sheetName]) - sum) / (float64(problem.problemScore[pn]) * float64(p.classSize[sheetName])) * 100
-			fmt.Printf("第 %v 题 %v 总得分 %v，得分率为 %0.2f%%\n", pn, problemType, (float64(problem.problemScore[pn])*float64(p.classSize[sheetName]) - sum), rate)
+			logrus.Printf("第 %v 题 %v 总得分 %v，得分率为 %0.2f%%", pn, problemType, (float64(problem.problemScore[pn])*float64(p.classSize[sheetName]) - sum), rate)
 		}
 	}
 
@@ -154,7 +172,6 @@ func (p *problem) calculateOfProblemTypeWithClass(problemType string, sheetName 
 	problemColStart := pcm[problemType].classRateColStart + 2
 	pt := p.problems[problemType]
 	for _, pn := range pt.problemNumbers {
-		// fmt.Println(qn)
 		col, _ := excelize.ColumnNumberToName(pn + 3)
 		sum := float64(0)
 		for i := 0; i < p.classSize[sheetName]; i++ {
@@ -170,7 +187,7 @@ func (p *problem) calculateOfProblemTypeWithClass(problemType string, sheetName 
 		actualScore := (float64(pt.problemScore[pn])*float64(p.classSize[sheetName]) - sum) // 实得分
 		rate := (actualScore / totalScore) * 100                                            // 得分率
 
-		fmt.Printf("第 %v 题 %v 总得分 %v，得分率为 %0.2f%%\n", pn, problemType, actualScore, rate)
+		logrus.Printf("第 %v 题 %v 总得分 %v，得分率为 %0.2f%%", pn, problemType, actualScore, rate)
 
 		resultScoreCol, _ := excelize.ColumnNumberToName(problemColStart)
 		resultRateCol, _ := excelize.ColumnNumberToName(problemColStart + 1)
@@ -217,7 +234,7 @@ func (p *problem) calculateOfProblemTypeWithGrade(problemType string, sheets []s
 				vf, _ := strconv.ParseFloat(v, 64)
 				deductedPointSum += float64(vf)
 			}
-			// fmt.Printf("%v 扣了 %v 分\n", sheetName, deductedPointSum)
+			logrus.Debugf("%v 扣了 %v 分", sheetName, deductedPointSum)
 			totalScoreWithClass := (float64(pt.problemScore[pn]) * float64(p.classSize[sheetName])) // 某题全班总分数
 			actualScoreWithClass := (totalScoreWithClass - deductedPointSum)                        // 某题全班实得分
 
@@ -226,7 +243,7 @@ func (p *problem) calculateOfProblemTypeWithGrade(problemType string, sheets []s
 		}
 
 		rate := (actualScoreWithAllClass / totalScoreWithAllClass) * 100 // 得分率
-		fmt.Printf("第 %v 题 %v 实际得分 %v，得分率为 %0.2f%%\n", pn, problemType, actualScoreWithAllClass, rate)
+		logrus.Printf("第 %v 题 %v 实际得分 %v，得分率为 %0.2f%%", pn, problemType, actualScoreWithAllClass, rate)
 
 		resultScoreCol, _ := excelize.ColumnNumberToName(problemColStart)
 		resultRateCol, _ := excelize.ColumnNumberToName(problemColStart + 1)
@@ -247,6 +264,14 @@ func (p *problem) calculateOfProblemTypeWithGrade(problemType string, sheets []s
 }
 
 func main() {
+	// 初始化日志
+	logging.AddFlags(&logFlags)
+	pflag.Parse()
+	logFlags.LogOutput = "./stdout.log"
+	if err := logging.LogrusInit(&logFlags); err != nil {
+		logrus.Fatal("初始化日志失败", err)
+	}
+
 	fileOrginInfo := "info.xlsx"
 	f, err := excelize.OpenFile(fileOrginInfo)
 	if err != nil {
@@ -277,8 +302,6 @@ func main() {
 	p := NewProblems(f)
 	logrus.Infof("共 %v 个班，每班人数分别为 %v", p.classTotal, p.classSize)
 
-	fmt.Println(p)
-
 	sheets := f.GetSheetList()
 
 	// for i, sheetName := range sheets[1:2] {
@@ -303,5 +326,4 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("保存文件异常，原因: %v", err)
 	}
-
 }

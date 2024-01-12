@@ -3,7 +3,9 @@ module github.com/DesistDaydrea/excel
 go 1.20
 
 require (
+	github.com/DesistDaydream/logging v0.0.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/pflag v1.0.5
 	github.com/xuri/excelize/v2 v2.8.0
 )
 

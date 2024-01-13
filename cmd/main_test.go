@@ -21,6 +21,6 @@ func Test_initProblemCellNum(t *testing.T) {
 		}
 	}()
 
-	initScoreAnalysisSheetCellNum(fResult)
+	initScoreAnalysisSheetCellNum(fResult, []string{"计算题", "填空题", "判断题", "选择题", "解决问题"})
 
 }

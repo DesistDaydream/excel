@@ -23,51 +23,73 @@ type questionCellNum struct {
 
 // TODO: 读取 result_tmp.xlsx 文件，从文件中获取单元格的坐标位置
 var pcm = map[string]questionCellNum{
-	"计算题": {
-		classRateColStart: 7,
-		gradeRateColStart: 4,
-	},
-	"填空题": {
-		classRateColStart: 13,
-		gradeRateColStart: 10,
-	},
-	"判断题": {
-		classRateColStart: 39,
-		gradeRateColStart: 36,
-	},
-	"选择题": {
-		classRateColStart: 49,
-		gradeRateColStart: 46,
-	},
-	"解决问题": {
-		classRateColStart: 59,
-		gradeRateColStart: 56,
-	},
+	// "计算题": {
+	// 	classRateColStart: 7,
+	// 	gradeRateColStart: 4,
+	// },
+	// "填空题": {
+	// 	classRateColStart: 13,
+	// 	gradeRateColStart: 10,
+	// },
+	// "判断题": {
+	// 	classRateColStart: 39,
+	// 	gradeRateColStart: 36,
+	// },
+	// "选择题": {
+	// 	classRateColStart: 49,
+	// 	gradeRateColStart: 46,
+	// },
+	// "解决问题": {
+	// 	classRateColStart: 59,
+	// 	gradeRateColStart: 56,
+	// },
 }
 
 // TODO: 获取成绩分析表特定单元格坐标
-func initScoreAnalysisSheetCellNum(f *excelize.File) {
+func initScoreAnalysisSheetCellNum(f *excelize.File, questionTypes []string) {
 	// sheetList := []string{"年级各题得分率","班级各题得分率"}
 	// sheetList := f.GetSheetList()
-	rowsGrade, err := f.GetRows("年级各题得分率")
-	if err != nil {
+
+	// pcm1 := make(map[string]questionCellNum)
+
+	var (
+		rowsGrade, rowsClass [][]string
+		err                  error
+	)
+
+	if rowsGrade, err = f.GetRows("年级各题得分率"); err != nil {
 		logrus.Fatalf("获取年级各题得分率数据异常: %v", err)
 	}
-	for colIndex, row := range rowsGrade[1] {
-		if strings.Contains(row, "总分") {
-			fmt.Println(colIndex+1, row)
+	if rowsClass, err = f.GetRows("班级各题得分率"); err != nil {
+		logrus.Fatalf("获取班级各题得分率数据异常: %v", err)
+	}
+
+	for _, qt := range questionTypes {
+		var (
+			classRateColStart, gradeRateColStart int
+		)
+
+		for colIndex, row := range rowsGrade[1] {
+			if row == fmt.Sprintf("%v总分", qt) {
+				gradeRateColStart = colIndex + 1
+				break
+			}
+		}
+
+		for colIndex, row := range rowsClass[1] {
+			if row == fmt.Sprintf("%v总分", qt) {
+				classRateColStart = colIndex + 1
+				break
+			}
+		}
+
+		pcm[qt] = questionCellNum{
+			classRateColStart: classRateColStart,
+			gradeRateColStart: gradeRateColStart,
 		}
 	}
 
-	rowsClass, err := f.GetRows("班级各题得分率")
-	if err != nil {
-		logrus.Fatalf("获取年级各题得分率数据异常: %v", err)
-	}
-	for colIndex, row := range rowsClass[1] {
-		if strings.Contains(row, "总分") {
-			fmt.Println(colIndex+1, row)
-		}
-	}
+	logrus.Debugf("检查获取的单元格列号: %v", pcm)
 }
 
 type examination struct {
@@ -270,8 +292,8 @@ func (e *examination) calculateOfQuestionTypeWithGrade(questionType string, shee
 func main() {
 	// 初始化日志
 	logging.AddFlags(&logFlags)
-	pflag.Parse()
 	logFlags.LogOutput = "./stdout.log"
+	pflag.Parse()
 	if err := logging.LogrusInit(&logFlags); err != nil {
 		logrus.Fatal("初始化日志失败", err)
 	}
@@ -305,6 +327,8 @@ func main() {
 
 	e := NewExamination(f)
 	logrus.Infof("共 %v 个班，每班人数分别为 %v", e.classTotal, e.classSize)
+
+	initScoreAnalysisSheetCellNum(fResult, e.questionTypes)
 
 	sheets := f.GetSheetList()
 
